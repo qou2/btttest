@@ -1191,16 +1191,14 @@ function showPlayerResults(playerName, results) {
   if (results.length === 0) {
     popupResults.innerHTML = '<p style="text-align: center; color: var(--text-color); opacity: 0.7;">No results found for this player.</p>';
   } else {
-    popupResults.innerHTML = results.map(result => `
-      <div class="player-tier-result">
-        <div class="gamemode-name">${result.gameMode}</div>
-        <div class="tier-info">
-          <span class="tier-badge tier-${result.tier.toLowerCase()}">${result.tier} Tier</span>
-          <span class="region-badge ${result.region.toLowerCase()}">${result.region}</span>
-          ${result.badges.map(badge => `<span class="badge">${badge}</span>`).join('')}
-        </div>
-      </div>
-    `).join('');
+popupResults.innerHTML = results.map(result => `
+  <div class="player-tier-result">
+    <div class="gamemode-name">${result.gameMode}</div>
+    <div class="tier-info">
+      <span class="tier-badge tier-${result.tier.toLowerCase()}">${result.tier} Tier</span>
+    </div>
+  </div>
+`).join('');
   }
   
   popup.style.display = 'block';
