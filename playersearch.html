@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -144,6 +145,59 @@
         .search-loading.active {
             display: block;
             animation: spin 1s linear infinite;
+        }
+
+        .autofill-dropdown {
+            position: absolute;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: var(--secondary-bg);
+            border: 1px solid rgba(110, 91, 223, 0.3);
+            border-radius: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+            margin-top: 5px;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .autofill-dropdown.active {
+            display: block;
+        }
+
+        .autofill-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            border-bottom: 1px solid rgba(110, 91, 223, 0.1);
+            transition: background-color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .autofill-item:hover,
+        .autofill-item.highlighted {
+            background-color: rgba(110, 91, 223, 0.2);
+        }
+
+        .autofill-item:last-child {
+            border-bottom: none;
+        }
+
+        .autofill-item-icon {
+            color: var(--accent-color);
+            font-size: 14px;
+        }
+
+        .autofill-item-text {
+            flex: 1;
+        }
+
+        .autofill-item-count {
+            font-size: 12px;
+            color: rgba(230, 237, 243, 0.6);
         }
 
         @keyframes spin {
@@ -469,8 +523,9 @@
             
             <div class="search-container">
                 <i class="fas fa-search search-icon"></i>
-                <input type="text" id="player-search" class="search-input" placeholder="Search for a player...">
+                <input type="text" id="player-search" class="search-input" placeholder="Search for a player... (Press Enter)">
                 <i class="fas fa-spinner search-loading" id="search-loading"></i>
+                <div id="autofill-dropdown" class="autofill-dropdown"></div>
             </div>
             
             <div class="header-center">
@@ -492,6 +547,7 @@
         <p class="demo-description">
             Search for any player across all game modes to see their tier rankings and positions. 
             The search will look through all tier lists including Skywars, Midfight, Bridge, Sumo, NoDebuff, BuildUHC, and Bedfight.
+            <br><strong>Press Enter to search or select from the dropdown suggestions.</strong>
         </p>
 
         <div class="features-grid">
@@ -499,9 +555,9 @@
                 <div class="feature-icon">
                     <i class="fas fa-search"></i>
                 </div>
-                <div class="feature-title">Real-time Search</div>
+                <div class="feature-title">Smart Autofill</div>
                 <div class="feature-description">
-                    Search across all game modes instantly as you type. Results update in real-time.
+                    Get instant suggestions as you type. Press Enter to search or click on a suggestion.
                 </div>
             </div>
 
@@ -559,11 +615,17 @@
                 this.modalBody = document.getElementById('modal-body');
                 this.closeBtn = document.getElementById('close-modal');
                 this.loadingIcon = document.getElementById('search-loading');
+                this.autofillDropdown = document.getElementById('autofill-dropdown');
                 
                 this.debounceTimer = null;
                 this.cache = new Map();
+                this.playerCache = new Map();
+                this.allPlayers = [];
+                this.highlightedIndex = -1;
+                this.currentSuggestions = [];
                 
                 this.init();
+                this.loadAllPlayers();
             }
 
             init() {
@@ -571,20 +633,45 @@
                     clearTimeout(this.debounceTimer);
                     const query = e.target.value.trim();
                     
-                    if (query.length >= 2) {
+                    if (query.length >= 1) {
                         this.debounceTimer = setTimeout(() => {
-                            this.searchPlayer(query);
-                        }, 300);
+                            this.showAutofill(query);
+                        }, 150);
+                    } else {
+                        this.hideAutofill();
                     }
                 });
 
-                this.searchInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        const query = e.target.value.trim();
-                        if (query.length >= 2) {
-                            clearTimeout(this.debounceTimer);
-                            this.searchPlayer(query);
+                this.searchInput.addEventListener('keydown', (e) => {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        this.highlightNext();
+                    } else if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        this.highlightPrevious();
+                    } else if (e.key === 'Enter') {
+                        e.preventDefault();
+                        if (this.highlightedIndex >= 0) {
+                            this.selectSuggestion(this.highlightedIndex);
+                        } else {
+                            const query = e.target.value.trim();
+                            if (query.length >= 1) {
+                                this.searchPlayer(query);
+                            }
                         }
+                    } else if (e.key === 'Escape') {
+                        this.hideAutofill();
+                    }
+                });
+
+                this.searchInput.addEventListener('blur', () => {
+                    setTimeout(() => this.hideAutofill(), 200);
+                });
+
+                this.searchInput.addEventListener('focus', () => {
+                    const query = this.searchInput.value.trim();
+                    if (query.length >= 1) {
+                        this.showAutofill(query);
                     }
                 });
 
@@ -602,7 +689,158 @@
                 });
             }
 
+            async loadAllPlayers() {
+                for (const gameMode of GAME_MODES) {
+                    try {
+                        const players = await this.fetchGameModePlayers(gameMode.name);
+                        this.allPlayers.push(...players);
+                    } catch (error) {
+                        console.warn(`Failed to load ${gameMode.name} players:`, error);
+                    }
+                }
+                
+                this.allPlayers = [...new Set(this.allPlayers)].sort();
+            }
+
+            async fetchGameModePlayers(gameMode) {
+                try {
+                    const cacheKey = `${gameMode}_players`;
+                    
+                    if (this.playerCache.has(cacheKey)) {
+                        return this.playerCache.get(cacheKey);
+                    }
+
+                    const response = await fetch(`${gameMode}.html`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const htmlContent = await response.text();
+                    const players = this.parsePlayersFromHTML(htmlContent);
+                    
+                    this.playerCache.set(cacheKey, players);
+                    return players;
+                    
+                } catch (error) {
+                    console.error(`Error fetching ${gameMode} players:`, error);
+                    return [];
+                }
+            }
+
+            parsePlayersFromHTML(htmlContent) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                
+                const playerNameElements = tempDiv.querySelectorAll('.player-name');
+                const players = [];
+                
+                playerNameElements.forEach(nameElement => {
+                    const playerText = nameElement.childNodes[0] ? 
+                        nameElement.childNodes[0].textContent.trim() : 
+                        nameElement.textContent.replace(/Tester/gi, '').trim();
+                    
+                    if (playerText && playerText !== '') {
+                        players.push(playerText);
+                    }
+                });
+                
+                return players;
+            }
+
+            showAutofill(query) {
+                const suggestions = this.getSuggestions(query);
+                this.currentSuggestions = suggestions;
+                this.highlightedIndex = -1;
+                
+                if (suggestions.length === 0) {
+                    this.hideAutofill();
+                    return;
+                }
+
+                const suggestionItems = suggestions.map((suggestion, index) => {
+                    const matchCount = this.getPlayerMatchCount(suggestion);
+                    return `
+                        <div class="autofill-item" data-index="${index}">
+                            <i class="fas fa-user autofill-item-icon"></i>
+                            <span class="autofill-item-text">${suggestion}</span>
+                            <span class="autofill-item-count">${matchCount} mode${matchCount !== 1 ? 's' : ''}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                this.autofillDropdown.innerHTML = suggestionItems;
+                this.autofillDropdown.classList.add('active');
+
+                this.autofillDropdown.querySelectorAll('.autofill-item').forEach((item, index) => {
+                    item.addEventListener('click', () => {
+                        this.selectSuggestion(index);
+                    });
+                });
+            }
+
+            getSuggestions(query) {
+                const lowerQuery = query.toLowerCase();
+                return this.allPlayers
+                    .filter(player => player.toLowerCase().includes(lowerQuery))
+                    .slice(0, 8);
+            }
+
+            getPlayerMatchCount(playerName) {
+                let count = 0;
+                for (const gameMode of GAME_MODES) {
+                    const cacheKey = `${gameMode.name}_players`;
+                    const players = this.playerCache.get(cacheKey) || [];
+                    if (players.some(p => p.toLowerCase() === playerName.toLowerCase())) {
+                        count++;
+                    }
+                }
+                return count;
+            }
+
+            highlightNext() {
+                if (this.currentSuggestions.length === 0) return;
+                
+                this.highlightedIndex = (this.highlightedIndex + 1) % this.currentSuggestions.length;
+                this.updateHighlight();
+            }
+
+            highlightPrevious() {
+                if (this.currentSuggestions.length === 0) return;
+                
+                this.highlightedIndex = this.highlightedIndex <= 0 
+                    ? this.currentSuggestions.length - 1 
+                    : this.highlightedIndex - 1;
+                this.updateHighlight();
+            }
+
+            updateHighlight() {
+                const items = this.autofillDropdown.querySelectorAll('.autofill-item');
+                items.forEach((item, index) => {
+                    if (index === this.highlightedIndex) {
+                        item.classList.add('highlighted');
+                    } else {
+                        item.classList.remove('highlighted');
+                    }
+                });
+            }
+
+            selectSuggestion(index) {
+                if (index >= 0 && index < this.currentSuggestions.length) {
+                    const selectedPlayer = this.currentSuggestions[index];
+                    this.searchInput.value = selectedPlayer;
+                    this.hideAutofill();
+                    this.searchPlayer(selectedPlayer);
+                }
+            }
+
+            hideAutofill() {
+                this.autofillDropdown.classList.remove('active');
+                this.highlightedIndex = -1;
+                this.currentSuggestions = [];
+            }
+
             async searchPlayer(playerName) {
+                this.hideAutofill();
                 this.showLoading(true);
                 
                 try {
@@ -643,7 +881,7 @@
                 return playerData;
             }
 
-            async fetchGameModeTier(gameMode, playerName) {
+async fetchGameModeTier(gameMode, playerName) {
                 try {
                     const cacheKey = gameMode;
                     let htmlContent;
@@ -662,161 +900,105 @@
                     return this.parsePlayerFromHTML(htmlContent, playerName);
                     
                 } catch (error) {
-                    console.error(`Error fetching ${gameMode} data:`, error);
+                    console.error(`Error fetching ${gameMode} tier:`, error);
                     return null;
                 }
             }
 
-            parsePlayerFromHTML(htmlContent, playerName) {
+            parsePlayerFromHTML(htmlContent, searchPlayerName) {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = htmlContent;
                 
-                const playerNameElements = tempDiv.querySelectorAll('.player-name');
+                const playerCards = tempDiv.querySelectorAll('.player-card');
+                let currentTier = 'Unranked';
+                let rank = 0;
                 
-                for (let i = 0; i < playerNameElements.length; i++) {
-                    const nameElement = playerNameElements[i];
-                    const playerText = nameElement.childNodes[0] ? 
-                        nameElement.childNodes[0].textContent.trim().toLowerCase() : 
-                        nameElement.textContent.replace(/Tester/gi, '').trim().toLowerCase();
+                for (let i = 0; i < playerCards.length; i++) {
+                    const card = playerCards[i];
                     
-                    if (playerText === playerName.toLowerCase()) {
-                        const tier = this.determineTierFromElement(nameElement);
-                        const rank = this.determineRankFromElement(nameElement);
+                    // Check if this is a tier header
+                    const tierHeader = card.querySelector('.tier-header');
+                    if (tierHeader) {
+                        currentTier = tierHeader.textContent.trim();
+                        rank = 0;
+                        continue;
+                    }
+                    
+                    // Check if this is a player card
+                    const playerNameElement = card.querySelector('.player-name');
+                    if (playerNameElement) {
+                        rank++;
+                        const playerText = playerNameElement.childNodes[0] ? 
+                            playerNameElement.childNodes[0].textContent.trim() : 
+                            playerNameElement.textContent.replace(/Tester/gi, '').trim();
                         
-                        return {
-                            tier: tier,
-                            rank: rank
-                        };
+                        if (playerText.toLowerCase() === searchPlayerName.toLowerCase()) {
+                            return {
+                                tier: currentTier,
+                                rank: rank
+                            };
+                        }
                     }
                 }
                 
                 return null;
             }
 
-            determineTierFromElement(element) {
-                let current = element;
-                while (current && current !== document.body) {
-                    if (current.classList && current.classList.contains('tier-column')) {
-                        const tierLabel = current.querySelector('.tier-label');
-                        if (tierLabel) {
-                            const tierText = tierLabel.textContent.trim().toUpperCase();
-                            return tierText;
-                        }
-                        break;
-                    }
-                    current = current.parentElement;
-                }
-                
-                let tierColumn = element.closest('.tier-column');
-                if (tierColumn) {
-                    const tierLabel = tierColumn.querySelector('.tier-label');
-                    if (tierLabel) {
-                        if (tierLabel.classList.contains('splus')) return 'S+';
-                        if (tierLabel.classList.contains('s')) return 'S';
-                        if (tierLabel.classList.contains('a')) return 'A';
-                        if (tierLabel.classList.contains('b')) return 'B';
-                        if (tierLabel.classList.contains('c')) return 'C';
-                        if (tierLabel.classList.contains('d')) return 'D';
-                        
-                        return tierLabel.textContent.trim().toUpperCase();
-                    }
-                }
-                
-                return 'Unranked';
-            }
-
-            determineRankFromElement(element) {
-                const tierColumn = element.closest('.tier-column');
-                if (!tierColumn) return 1;
-                
-                const playerCards = tierColumn.querySelectorAll('.player-card');
-                const playerCard = element.closest('.player-card');
-                
-                if (playerCard) {
-                    for (let i = 0; i < playerCards.length; i++) {
-                        if (playerCards[i] === playerCard) {
-                            return i + 1;
-                        }
-                    }
-                }
-                
-                return 1;
-            }
-
             displayResults(playerName, playerData) {
                 if (!playerData.found) {
-                    this.displayNotFound(playerName);
-                    return;
+                    this.modalBody.innerHTML = `
+                        <div class="not-found">
+                            <i class="fas fa-user-slash"></i>
+                            <h3>Player Not Found</h3>
+                            <p>No rankings found for "${playerName}" in any game mode.</p>
+                        </div>
+                    `;
+                } else {
+                    const tierCards = Object.values(playerData.tiers).map(tierData => `
+                        <div class="tier-card">
+                            <div class="gamemode-header">
+                                <i class="${tierData.icon} gamemode-icon"></i>
+                                <span class="gamemode-name">${tierData.displayName}</span>
+                            </div>
+                            <div class="tier-info">
+                                <span class="tier-badge tier-${tierData.tier.toLowerCase().replace(/\+/g, 'plus')}">${tierData.tier}</span>
+                                <span class="rank-number">#${tierData.rank}</span>
+                            </div>
+                        </div>
+                    `).join('');
+
+                    this.modalBody.innerHTML = `
+                        <div class="player-info">
+                            <div class="player-name">${playerName}</div>
+                            <div class="player-stats">
+                                <div class="stat-item">
+                                    <div class="stat-number">${playerData.totalFound}</div>
+                                    <div class="stat-label">Game Modes</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-number">${Object.values(playerData.tiers).filter(t => t.tier !== 'Unranked').length}</div>
+                                    <div class="stat-label">Ranked</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tier-results">
+                            ${tierCards}
+                        </div>
+                    `;
                 }
-
-                const tierCards = Object.values(playerData.tiers).map(tier => `
-                    <div class="tier-card">
-                        <div class="gamemode-header">
-                            <i class="${tier.icon} gamemode-icon"></i>
-                            <span class="gamemode-name">${tier.displayName}</span>
-                        </div>
-                        <div class="tier-info">
-                            <span class="tier-badge tier-${tier.tier.toLowerCase().replace('+', 'plus')}">
-                                ${tier.tier} Tier
-                            </span>
-                            <span class="rank-info">#${tier.rank}</span>
-                        </div>
-                    </div>
-                `).join('');
-
-                this.modalBody.innerHTML = `
-                    <div class="player-info">
-                        <div class="player-name">${playerName}</div>
-                        <div class="player-stats">
-                            <div class="stat-item">
-                                <div class="stat-number">${playerData.totalFound}</div>
-                                <div class="stat-label">Ranked Modes</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-number">${GAME_MODES.length}</div>
-                                <div class="stat-label">Total Modes</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="tier-results">
-                        ${tierCards}
-                    </div>
-                `;
-
-                this.showModal();
-            }
-
-            displayNotFound(playerName) {
-                this.modalBody.innerHTML = `
-                    <div class="not-found">
-                        <i class="fas fa-user-slash"></i>
-                        <h3>Player Not Found</h3>
-                        <p>No results found for "${playerName}" in any tier lists.</p>
-                        <p>Make sure the spelling is correct or try a different search term.</p>
-                    </div>
-                `;
-                this.showModal();
+                
+                this.openModal();
             }
 
             displayError(message) {
                 this.modalBody.innerHTML = `
                     <div class="not-found">
                         <i class="fas fa-exclamation-triangle"></i>
-                        <h3>Search Error</h3>
+                        <h3>Error</h3>
                         <p>${message}</p>
                     </div>
                 `;
-                this.showModal();
-            }
-
-            showModal() {
-                this.searchModal.classList.add('active');
-                document.body.style.overflow = 'hidden';
-            }
-
-            closeModal() {
-                this.searchModal.classList.remove('active');
-                document.body.style.overflow = '';
+                this.openModal();
             }
 
             showLoading(show) {
@@ -826,23 +1008,65 @@
                     this.loadingIcon.classList.remove('active');
                 }
             }
+
+            openModal() {
+                this.searchModal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+
+            closeModal() {
+                this.searchModal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            new PlayerSearch();
-            
-            const themeToggle = document.getElementById('theme-toggle-btn');
-            const themeIcon = themeToggle.querySelector('i');
-            
-            themeToggle.addEventListener('click', function() {
-                document.body.classList.toggle('light-theme');
-                
-                if (document.body.classList.contains('light-theme')) {
-                    themeIcon.classList.replace('fa-moon', 'fa-sun');
+        // Theme toggle functionality
+        class ThemeToggle {
+            constructor() {
+                this.themeBtn = document.getElementById('theme-toggle-btn');
+                this.currentTheme = 'dark';
+                this.init();
+            }
+
+            init() {
+                this.themeBtn.addEventListener('click', () => {
+                    this.toggleTheme();
+                });
+            }
+
+            toggleTheme() {
+                if (this.currentTheme === 'dark') {
+                    this.setLightTheme();
                 } else {
-                    themeIcon.classList.replace('fa-sun', 'fa-moon');
+                    this.setDarkTheme();
                 }
-            });
+            }
+
+            setLightTheme() {
+                document.documentElement.style.setProperty('--primary-bg', '#f8f9fa');
+                document.documentElement.style.setProperty('--secondary-bg', '#ffffff');
+                document.documentElement.style.setProperty('--card-bg', 'rgba(255, 255, 255, 0.8)');
+                document.documentElement.style.setProperty('--text-color', '#2d3748');
+                
+                this.themeBtn.innerHTML = '<i class="fas fa-sun"></i>';
+                this.currentTheme = 'light';
+            }
+
+            setDarkTheme() {
+                document.documentElement.style.setProperty('--primary-bg', '#0f1318');
+                document.documentElement.style.setProperty('--secondary-bg', '#161b22');
+                document.documentElement.style.setProperty('--card-bg', 'rgba(30, 36, 46, 0.6)');
+                document.documentElement.style.setProperty('--text-color', '#e6edf3');
+                
+                this.themeBtn.innerHTML = '<i class="fas fa-moon"></i>';
+                this.currentTheme = 'dark';
+            }
+        }
+
+        // Initialize the application
+        document.addEventListener('DOMContentLoaded', () => {
+            new PlayerSearch();
+            new ThemeToggle();
         });
     </script>
 </body>
