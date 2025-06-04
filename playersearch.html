@@ -1113,9 +1113,23 @@ searchInput.addEventListener('input', function() {
     return;
   }
   
-  const suggestions = allPlayers.filter(player => 
-    player.toLowerCase().includes(query)
-  ).slice(0, 5);
+  // Sort suggestions: names starting with query first, then names containing query
+  const suggestions = allPlayers
+    .filter(player => player.toLowerCase().includes(query))
+    .sort((a, b) => {
+      const aLower = a.toLowerCase();
+      const bLower = b.toLowerCase();
+      const aStartsWith = aLower.startsWith(query);
+      const bStartsWith = bLower.startsWith(query);
+      
+      // If one starts with query and other doesn't, prioritize the one that starts with it
+      if (aStartsWith && !bStartsWith) return -1;
+      if (!aStartsWith && bStartsWith) return 1;
+      
+      // If both start with query or both don't, sort alphabetically
+      return aLower.localeCompare(bLower);
+    })
+    .slice(0, 5);
   
   if (suggestions.length > 0) {
     suggestionsDiv.innerHTML = suggestions.map(player => 
