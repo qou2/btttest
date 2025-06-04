@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Player Search - Bedrock Tier Testing</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        :root {
+            --primary-bg: #0f1318;
+            --secondary-bg: #161b22;
+            --card-bg: rgba(30, 36, 46, 0.6);
+            --text-color: #e6edf3;
+            --accent-color: #6e5bdf;
+            --discord-color: #5464CA;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            font-family: 'Segoe UI', 'Arial', sans-serif;
+            min-height: 100vh;
+        }
+
+        header {
+            background-color: var(--secondary-bg);
+            padding: 20px;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.3);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(110, 91, 223, 0.2);
+        }
+
+        .header-content {
+            display: flex;
+            align-items: center;
+            flex: 1;
+        }
+
+        .header-center {
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            white-space: nowrap;
+            text-align: center;
+        }
+
+        .header-center img {
+            max-height: 75px;
+            display: block;
+        }
+
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            background: linear-gradient(to right, #6e5bdf, #42b883);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-left: 15px;
+        }
+
+        .theme-toggle {
+            margin-right: 15px;
+        }
+
+        .theme-toggle-btn {
+            background: linear-gradient(135deg, var(--accent-color), #4752C4);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(110, 91, 223, 0.4);
+        }
+
+        .theme-toggle-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(110, 91, 223, 0.6);
+        }
+
+        .search-container {
+            position: relative;
+            margin-right: 15px;
+        }
+
+        .search-input {
+            background-color: var(--card-bg);
+            border: 1px solid rgba(110, 91, 223, 0.3);
+            border-radius: 25px;
+            padding: 10px 15px 10px 40px;
+            color: var(--text-color);
+            font-size: 14px;
+            width: 250px;
+            transition: all 0.3s;
+            backdrop-filter: blur(5px);
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(110, 91, 223, 0.2);
+            width: 280px;
+        }
+
+        .search-input::placeholder {
+            color: rgba(230, 237, 243, 0.6);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent-color);
+            font-size: 16px;
+            pointer-events: none;
+        }
+
+        .search-loading {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--accent-color);
+            font-size: 14px;
+            display: none;
+        }
+
+        .search-loading.active {
+            display: block;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: translateY(-50%) rotate(0deg); }
+            100% { transform: translateY(-50%) rotate(360deg); }
+        }
+
+        .header-buttons {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .discord-button {
+            background: linear-gradient(135deg, #806AD6, #5464CA);
+            padding: 10px 18px;
+            border-radius: 12px;
+            text-decoration: none;
+            color: white;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(88, 101, 242, 0.4);
+        }
+
+        .discord-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(88, 101, 242, 0.6);
+        }
+
+        .discord-button i {
+            margin-right: 8px;
+            font-size: 20px;
+        }
+
+        .search-modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .search-modal.active {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .modal-content {
+            background-color: var(--secondary-bg);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(110, 91, 223, 0.3);
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateY(-50px) scale(0.9); opacity: 0; }
+            to { transform: translateY(0) scale(1); opacity: 1; }
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(110, 91, 223, 0.3);
+        }
+
+        .modal-title {
+            font-size: 24px;
+            color: var(--accent-color);
+            margin: 0;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+            border-radius: 50%;
+            width: 35px;
+            height: 35px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+
+        .close-btn:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+            color: var(--accent-color);
+        }
+
+        .player-info {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .player-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: var(--text-color);
+            margin-bottom: 10px;
+        }
+
+        .player-stats {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-item {
+            text-align: center;
+        }
+
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: var(--accent-color);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: rgba(230, 237, 243, 0.7);
+        }
+
+        .tier-results {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .tier-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid rgba(110, 91, 223, 0.2);
+            transition: all 0.3s;
+        }
+
+        .tier-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .gamemode-header {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .gamemode-icon {
+            font-size: 20px;
+            color: var(--accent-color);
+            margin-right: 10px;
+        }
+
+        .gamemode-name {
+            font-size: 18px;
+            font-weight: bold;
+            color: var(--text-color);
+        }
+
+        .tier-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .tier-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+
+        .tier-splus { background: linear-gradient(135deg, #ff1744, #ff6b6b); color: white; }
+        .tier-s { background: linear-gradient(135deg, #ff6b6b, #ff8e8e); color: white; }
+        .tier-a { background: linear-gradient(135deg, #4ecdc4, #44a08d); color: white; }
+        .tier-b { background: linear-gradient(135deg, #45b7d1, #96c93d); color: white; }
+        .tier-c { background: linear-gradient(135deg, #f9ca24, #f0932b); color: white; }
+        .tier-d { background: linear-gradient(135deg, #eb4d4b, #6c5ce7); color: white; }
+        .tier-unranked { background: linear-gradient(135deg, #a4a4a4, #767676); color: white; }
+
+        .not-found {
+            text-align: center;
+            padding: 40px;
+            color: rgba(230, 237, 243, 0.7);
+        }
+
+        .not-found i {
+            font-size: 48px;
+            margin-bottom: 15px;
+            color: var(--accent-color);
+        }
+
+        .main-content {
+            padding: 50px 20px;
+            text-align: center;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .demo-title {
+            font-size: 36px;
+            font-weight: bold;
+            background: linear-gradient(to right, #6e5bdf, #42b883);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }
+
+        .demo-description {
+            font-size: 18px;
+            color: rgba(230, 237, 243, 0.8);
+            line-height: 1.6;
+            margin-bottom: 30px;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .feature-card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 25px;
+            border: 1px solid rgba(110, 91, 223, 0.2);
+            transition: all 0.3s;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+        }
+
+        .feature-icon {
+            font-size: 32px;
+            color: var(--accent-color);
+            margin-bottom: 15px;
+        }
+
+        .feature-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: var(--text-color);
+            margin-bottom: 10px;
+        }
+
+        .feature-description {
+            color: rgba(230, 237, 243, 0.7);
+            line-height: 1.5;
+        }
+
+        @media (max-width: 768px) {
+            .search-input {
+                width: 180px;
+            }
+            
+            .search-input:focus {
+                width: 200px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                padding: 20px;
+            }
+            
+            .tier-results {
+                grid-template-columns: 1fr;
+            }
+            
+            .player-stats {
+                flex-direction: column;
+                gap: 10px;
+            }
+
+            .demo-title {
+                font-size: 28px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <div class="theme-toggle">
+                <button id="theme-toggle-btn" class="theme-toggle-btn">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+            
+            <div class="search-container">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="player-search" class="search-input" placeholder="Search for a player...">
+                <i class="fas fa-spinner search-loading" id="search-loading"></i>
+            </div>
+            
+            <div class="header-center">
+                <a href="index.html">
+                    <img src="bttt.png" alt="Bedrock Tier Testing Logo">
+                </a>
+            </div>
+        </div>
+        
+        <div class="header-buttons">
+            <a class="discord-button" href="https://discord.gg/yuMzU7485w" target="_blank">
+                <i class="fab fa-discord"></i> Join Discord
+            </a>
+        </div>
+    </header>
+
+    <div class="main-content">
+        <h1 class="demo-title">Player Search</h1>
+        <p class="demo-description">
+            Search for any player across all game modes to see their tier rankings and positions. 
+            The search will look through all tier lists including Skywars, Midfight, Bridge, Sumo, NoDebuff, BuildUHC, and Bedfight.
+        </p>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-search"></i>
+                </div>
+                <div class="feature-title">Real-time Search</div>
+                <div class="feature-description">
+                    Search across all game modes instantly as you type. Results update in real-time.
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-trophy"></i>
+                </div>
+                <div class="feature-title">Complete Rankings</div>
+                <div class="feature-description">
+                    See a player's tier and exact rank position in each game mode they're listed in.
+                </div>
+            </div>
+
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <i class="fas fa-gamepad"></i>
+                </div>
+                <div class="feature-title">All Game Modes</div>
+                <div class="feature-description">
+                    Covers all 7 game modes: Skywars, Midfight, Bridge, Sumo, NoDebuff, BuildUHC, and Bedfight.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="search-modal" class="search-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title">Player Search Results</h2>
+                <button class="close-btn" id="close-modal">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="modal-body">
+                <!-- Search results will be populated here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const GAME_MODES = [
+            { name: 'skywars', displayName: 'Skywars', icon: 'fas fa-cloud' },
+            { name: 'midfight', displayName: 'Midfight', icon: 'fas fa-fist-raised' },
+            { name: 'bridge', displayName: 'Bridge', icon: 'fas fa-archway' },
+            { name: 'sumo', displayName: 'Sumo', icon: 'fas fa-circle' },
+            { name: 'nodebuff', displayName: 'NoDebuff', icon: 'fas fa-shield-alt' },
+            { name: 'builduhc', displayName: 'BuildUHC', icon: 'fas fa-hammer' },
+            { name: 'bedfight', displayName: 'Bedfight', icon: 'fas fa-bed' }
+        ];
+
+        class PlayerSearch {
+            constructor() {
+                this.searchInput = document.getElementById('player-search');
+                this.searchModal = document.getElementById('search-modal');
+                this.modalBody = document.getElementById('modal-body');
+                this.closeBtn = document.getElementById('close-modal');
+                this.loadingIcon = document.getElementById('search-loading');
+                
+                this.debounceTimer = null;
+                this.cache = new Map();
+                
+                this.init();
+            }
+
+            init() {
+                this.searchInput.addEventListener('input', (e) => {
+                    clearTimeout(this.debounceTimer);
+                    const query = e.target.value.trim();
+                    
+                    if (query.length >= 2) {
+                        this.debounceTimer = setTimeout(() => {
+                            this.searchPlayer(query);
+                        }, 300);
+                    }
+                });
+
+                this.searchInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        const query = e.target.value.trim();
+                        if (query.length >= 2) {
+                            clearTimeout(this.debounceTimer);
+                            this.searchPlayer(query);
+                        }
+                    }
+                });
+
+                this.closeBtn.addEventListener('click', () => this.closeModal());
+                this.searchModal.addEventListener('click', (e) => {
+                    if (e.target === this.searchModal) {
+                        this.closeModal();
+                    }
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape' && this.searchModal.classList.contains('active')) {
+                        this.closeModal();
+                    }
+                });
+            }
+
+            async searchPlayer(playerName) {
+                this.showLoading(true);
+                
+                try {
+                    const playerData = await this.fetchPlayerData(playerName);
+                    this.displayResults(playerName, playerData);
+                } catch (error) {
+                    console.error('Search error:', error);
+                    this.displayError('An error occurred while searching. Please try again.');
+                } finally {
+                    this.showLoading(false);
+                }
+            }
+
+            async fetchPlayerData(playerName) {
+                const playerData = {
+                    found: false,
+                    tiers: {},
+                    totalFound: 0
+                };
+
+                for (const gameMode of GAME_MODES) {
+                    try {
+                        const tierData = await this.fetchGameModeTier(gameMode.name, playerName);
+                        if (tierData) {
+                            playerData.tiers[gameMode.name] = {
+                                ...gameMode,
+                                tier: tierData.tier,
+                                rank: tierData.rank
+                            };
+                            playerData.found = true;
+                            playerData.totalFound++;
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to fetch ${gameMode.name} data:`, error);
+                    }
+                }
+
+                return playerData;
+            }
+
+            async fetchGameModeTier(gameMode, playerName) {
+                try {
+                    const cacheKey = gameMode;
+                    let htmlContent;
+                    
+                    if (this.cache.has(cacheKey)) {
+                        htmlContent = this.cache.get(cacheKey);
+                    } else {
+                        const response = await fetch(`${gameMode}.html`);
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        htmlContent = await response.text();
+                        this.cache.set(cacheKey, htmlContent);
+                    }
+
+                    return this.parsePlayerFromHTML(htmlContent, playerName);
+                    
+                } catch (error) {
+                    console.error(`Error fetching ${gameMode} data:`, error);
+                    return null;
+                }
+            }
+
+            parsePlayerFromHTML(htmlContent, playerName) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = htmlContent;
+                
+                const playerNameElements = tempDiv.querySelectorAll('.player-name');
+                
+                for (let i = 0; i < playerNameElements.length; i++) {
+                    const nameElement = playerNameElements[i];
+                    const playerText = nameElement.childNodes[0] ? 
+                        nameElement.childNodes[0].textContent.trim().toLowerCase() : 
+                        nameElement.textContent.replace(/Tester/gi, '').trim().toLowerCase();
+                    
+                    if (playerText === playerName.toLowerCase()) {
+                        const tier = this.determineTierFromElement(nameElement);
+                        const rank = this.determineRankFromElement(nameElement);
+                        
+                        return {
+                            tier: tier,
+                            rank: rank
+                        };
+                    }
+                }
+                
+                return null;
+            }
+
+            determineTierFromElement(element) {
+                let current = element;
+                while (current && current !== document.body) {
+                    if (current.classList && current.classList.contains('tier-column')) {
+                        const tierLabel = current.querySelector('.tier-label');
+                        if (tierLabel) {
+                            const tierText = tierLabel.textContent.trim().toUpperCase();
+                            return tierText;
+                        }
+                        break;
+                    }
+                    current = current.parentElement;
+                }
+                
+                let tierColumn = element.closest('.tier-column');
+                if (tierColumn) {
+                    const tierLabel = tierColumn.querySelector('.tier-label');
+                    if (tierLabel) {
+                        if (tierLabel.classList.contains('splus')) return 'S+';
+                        if (tierLabel.classList.contains('s')) return 'S';
+                        if (tierLabel.classList.contains('a')) return 'A';
+                        if (tierLabel.classList.contains('b')) return 'B';
+                        if (tierLabel.classList.contains('c')) return 'C';
+                        if (tierLabel.classList.contains('d')) return 'D';
+                        
+                        return tierLabel.textContent.trim().toUpperCase();
+                    }
+                }
+                
+                return 'Unranked';
+            }
+
+            determineRankFromElement(element) {
+                const tierColumn = element.closest('.tier-column');
+                if (!tierColumn) return 1;
+                
+                const playerCards = tierColumn.querySelectorAll('.player-card');
+                const playerCard = element.closest('.player-card');
+                
+                if (playerCard) {
+                    for (let i = 0; i < playerCards.length; i++) {
+                        if (playerCards[i] === playerCard) {
+                            return i + 1;
+                        }
+                    }
+                }
+                
+                return 1;
+            }
+
+            displayResults(playerName, playerData) {
+                if (!playerData.found) {
+                    this.displayNotFound(playerName);
+                    return;
+                }
+
+                const tierCards = Object.values(playerData.tiers).map(tier => `
+                    <div class="tier-card">
+                        <div class="gamemode-header">
+                            <i class="${tier.icon} gamemode-icon"></i>
+                            <span class="gamemode-name">${tier.displayName}</span>
+                        </div>
+                        <div class="tier-info">
+                            <span class="tier-badge tier-${tier.tier.toLowerCase().replace('+', 'plus')}">
+                                ${tier.tier} Tier
+                            </span>
+                            <span class="rank-info">#${tier.rank}</span>
+                        </div>
+                    </div>
+                `).join('');
+
+                this.modalBody.innerHTML = `
+                    <div class="player-info">
+                        <div class="player-name">${playerName}</div>
+                        <div class="player-stats">
+                            <div class="stat-item">
+                                <div class="stat-number">${playerData.totalFound}</div>
+                                <div class="stat-label">Ranked Modes</div>
+                            </div>
+                            <div class="stat-item">
+                                <div class="stat-number">${GAME_MODES.length}</div>
+                                <div class="stat-label">Total Modes</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="tier-results">
+                        ${tierCards}
+                    </div>
+                `;
+
+                this.showModal();
+            }
+
+            displayNotFound(playerName) {
+                this.modalBody.innerHTML = `
+                    <div class="not-found">
+                        <i class="fas fa-user-slash"></i>
+                        <h3>Player Not Found</h3>
+                        <p>No results found for "${playerName}" in any tier lists.</p>
+                        <p>Make sure the spelling is correct or try a different search term.</p>
+                    </div>
+                `;
+                this.showModal();
+            }
+
+            displayError(message) {
+                this.modalBody.innerHTML = `
+                    <div class="not-found">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <h3>Search Error</h3>
+                        <p>${message}</p>
+                    </div>
+                `;
+                this.showModal();
+            }
+
+            showModal() {
+                this.searchModal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+            }
+
+            closeModal() {
+                this.searchModal.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+
+            showLoading(show) {
+                if (show) {
+                    this.loadingIcon.classList.add('active');
+                } else {
+                    this.loadingIcon.classList.remove('active');
+                }
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            new PlayerSearch();
+            
+            const themeToggle = document.getElementById('theme-toggle-btn');
+            const themeIcon = themeToggle.querySelector('i');
+            
+            themeToggle.addEventListener('click', function() {
+                document.body.classList.toggle('light-theme');
+                
+                if (document.body.classList.contains('light-theme')) {
+                    themeIcon.classList.replace('fa-moon', 'fa-sun');
+                } else {
+                    themeIcon.classList.replace('fa-sun', 'fa-moon');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
